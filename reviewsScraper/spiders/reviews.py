@@ -1,4 +1,5 @@
 import scrapy
+import re
 import time
 from scrapy import Request
 import logging
@@ -10,6 +11,9 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from lxml.etree import tostring
+import pandas as pd
+
 
 
 
@@ -18,72 +22,165 @@ class ReviewsSpider(scrapy.Spider):
     allowed_domains = ['*']
     DRIVER_PATH = r"E:\ChromeDriver\chromedriver.exe"
     driver = webdriver.Chrome(executable_path=DRIVER_PATH)
-    start_urls = ["https://www.amazon.com/Non-Pull-Waterproof-Harness-PREVENTS-Accidents/dp/B019QAAENC/ref=sr_1_1?dchild=1&keywords=B019QAAENC&qid=1612381328&sr=8-1"]
+    df = pd.read_csv(r'C:\Users\shubh\Downloads\beauty_FLL.csv')
+    start_urls = list(zip(df.catmap,df.url))
+    
+    
+    def cleanhtml(self,raw_html):
+        cleanr = re.compile('<.*?>')
+        cleantext = re.sub(cleanr, ' ', raw_html)
+        cleantext = [i for i in cleantext.splitlines() if i.strip() !='']
+        cleantext = {cleantext[0]:cleantext[1:]}
+        return cleantext
 
     def start_requests(self):
-        for url in self.start_urls:
+        placeHolder = [] # to check duplicates
+        all_products_url = [] # will contain dict with catmap and url of products
+        for tup in self.start_urls[:200]:
+            all_products_url_singleCat = [] # will be used as place holder for a single category
+            url = tup[1]
+            catmap = tup[0]
+
             self.driver.get(url)
-            #pass
             try:
-                element = WebDriverWait(self.driver, 5).until(
-                EC.presence_of_element_located((By.XPATH, '//*[@class="a-size-large product-title-word-break"]'))
-                )
-                #scrolling to element
-                time.sleep(3)
-                element = self.driver.find_element_by_xpath('//*[contains(text(),"Customer reviews")]')
-                self.driver.execute_script("arguments[0].scrollIntoView();", element)
-                
-                #sleeping so that cooorect html is parsed
-                time.sleep(2)
-                #render html
-                soup = BeautifulSoup(self.driver.page_source, "html.parser")
-                #create xml tree to use xpath
-                dom = etree.HTML(str(soup))
-                #get description
-                productDescription = dom.xpath('//*[@id="productDescription"]//p//text()')
-                #get title
-                productTitle = dom.xpath('//*[@id="productTitle"]//text()')
-                #get asin
-                asin = dom.xpath("//*[contains(text(),'ASIN')]//following-sibling::span//text()")
-                #ratings
-                ratings = dom.xpath('//*[@class="reviewCountTextLinkedHistogram noUnderline"]/@title')
-                #about Item
-                AboutItem = dom.xpath('//*[@id="feature-bullets"]//text()')
-                #product details
-                productDetails = dom.xpath('//*[@id="detailBulletsWrapper_feature_div"]//text()')
-                #brand
-                brand = dom.xpath('//td//*[contains(text(),"Brand")]/parent::td/parent::tr//text()')
-                #price
-                price = dom.xpath('//*[@id="priceblock_ourprice"]//text()')
-                #simiral products
-                similarP = dom.xpath('//*[@id="sp_detail"]//*[@class="a-link-normal"]/@title')
+                for pagesToScrape in range(10): 
+                    element = WebDriverWait(self.driver, 5).until(
+                    EC.presence_of_element_located((By.XPATH, '//*[@class="a-section a-spacing-none a-spacing-top-small"]/h2'))
+                    )
+                    print('************************************************************')
+                    print(pagesToScrape)
+                    print('************************************************************')
+                    #sleeping so that cooorect html is parsed
+                    time.sleep(2)
+                    #render html
+                    soup = BeautifulSoup(self.driver.page_source, "html.parser")
+                    #create xml tree to use xpath
+                    dom = etree.HTML(str(soup))
+                    #get urls for products
+                    products_urls = dom.xpath('//*[@class="a-section a-spacing-none a-spacing-top-small"]/h2/a/@href')
+                    for products_url in products_urls:
+                        if products_url not in placeHolder:
+                            placeHolder.append(products_urls)
+                            #update to place holder
+                            all_products_url_singleCat =  [products_url] + all_products_url_singleCat
+                    #click next page
+                    element = self.driver.find_element_by_xpath("//*[@class='a-pagination']//*[contains(text(),'Next')]")
+                    element.click()
+                #update masterlist
+                all_products_url.append({catmap:all_products_url_singleCat})
 
-                AboutItem = [i.strip() for i in AboutItem if i.strip()!='']
-                productDetails = [i.strip() for i in productDetails if i.strip()!='']
-                brand = [i.strip() for i in brand if i.strip()!='']
-                a = {asin[0]:{"productDescription":productDescription,"productTitle":productTitle,"ratings":ratings,"AboutItem":AboutItem,"productDetails":productDetails,"brand":brand,"price":price,'similarProducts':similarP}}
-                
-                self.Asin = asin
-                
-                with open("Product.json","a") as fl:
-                    json.dump(a,fl)
-                    fl.write('\n')
-
-                SeeAllReviews = dom.xpath('//*[@data-hook="see-all-reviews-link-foot"]//@href')
-                SeeAllReviews = "https://www.amazon.com"+ SeeAllReviews[0]
-                yield Request(SeeAllReviews,callback=self.parseReviewpage,dont_filter=True)
-                
-                #moreAnswerLink = dom.xpath('//*[@class="a-button a-button-base askSeeMoreQuestionsLink"]//@href')
-                #moreAnswerLink = "https://www.amazon.com"+ moreAnswerLink[0]
-                #yield Request(moreAnswerLink,callback=self.parseQuestions,dont_filter=True)
             except Exception as e:
-                print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-                
+                print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
                 print(e)
-                
-                print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+                print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+            
+        
+        with open("urls.json","a") as fl:
+            json.dump(all_products_url,fl)
+            fl.write('\n')
 
-                yield Request(url,callback=self.parse,dont_filter=True)
+        
+        for al in all_products_url:
+            catmap = list(al.keys())[0]
+            url_set = al[catmap]
+            for url in url_set:
+
+                url = "https://www.amazon.com" + url
+                self.driver.get(url)
+                #pass
+                try:
+                    element = WebDriverWait(self.driver, 5).until(
+                    EC.presence_of_element_located((By.XPATH, '//*[@class="a-size-large product-title-word-break"]'))
+                    )
+                    #scrolling to element
+                    time.sleep(3)
+                    element = self.driver.find_element_by_xpath('//*[contains(text(),"Customer reviews")]')
+                    self.driver.execute_script("arguments[0].scrollIntoView();", element)
+                    
+                    #sleeping so that cooorect html is parsed
+                    time.sleep(2)
+                    #render html
+                    soup = BeautifulSoup(self.driver.page_source, "html.parser")
+                    #create xml tree to use xpath
+                    dom = etree.HTML(str(soup))
+                    #get description
+                    productDescription = dom.xpath("//*[contains(text(),'Product Description')]//parent::*//p//text()|//*[contains(text(),'Product description')]//parent::*//p//text()")
+
+                    #get title
+                    productTitle = dom.xpath('//*[@id="productTitle"]//text()')
+
+                    #get asin
+                    asin = dom.xpath("//*[contains(text(),'ASIN')]//following-sibling::span//text()")
+
+                    #ratings
+                    ratings = dom.xpath('//*[@class="reviewCountTextLinkedHistogram noUnderline"]/@title')
+                    
+                    #about Item
+                    AboutItem = dom.xpath('//*[@id="feature-bullets"]//li//span//text()')
+                    
+                    #product info
+
+                    prduct_info_values = dom.xpath('//*[@id="prodDetails"]//table//tr')
+                    
+                    prduct_info_values = [tostring(i).decode("utf-8").strip() for i in prduct_info_values if 'Customer Reviews' not in tostring(i).decode("utf-8").strip()]
+                    prduct_info_values = [self.cleanhtml(i) for i in prduct_info_values]
+
+                    #prduct_info_values = [i.text for i in prduct_info_values if 'Customer Reviews' not in tostring(i).decode("utf-8").strip()]
+                    
+                    #
+                    #product details
+                    """
+                    We will check for product details only if product info is null.
+                    As on page either details or information is present.
+                    """
+                    productDetails = dom.xpath('//*[@id="detailBulletsWrapper_feature_div"]//text()')
+                    #brand
+                    ##
+                    brand = dom.xpath('//td//*[contains(text(),"Brand")]/parent::td/parent::tr//text()')
+                    ##
+                    
+                    #price
+                    price = dom.xpath('//*[@id="priceblock_ourprice"]//text()|//*[@id="priceblock_saleprice"]//text()')
+                    #simiral products
+                    similarP = dom.xpath('//*[@id="sp_detail"]//*[@class="a-link-normal"]/@title')
+
+                    AboutItem = [i.strip() for i in AboutItem if i.strip()!='']
+                    productDetails = [i.strip() for i in productDetails if i.strip()!='']
+                    brand = [i.strip() for i in brand if i.strip()!='']
+
+                    SeeAllReviews = dom.xpath('//*[@data-hook="see-all-reviews-link-foot"]//@href')
+                    try:
+                        SeeAllReviews = "https://www.amazon.com"+ SeeAllReviews[0]
+                    except:
+                        print('!!!!!!!!!!!!!!!!!!!!!')
+                        SeeAllReviews = "None"
+                        print('No Reviews')
+                        print('!!!!!!!!!!!!!!!!!!!!!')
+                    #yield Request(SeeAllReviews,callback=self.parseReviewpage,dont_filter=True)
+                    
+                    moreAnswerLink = dom.xpath('//*[@class="a-button a-button-base askSeeMoreQuestionsLink"]//@href')
+                    try:
+                        moreAnswerLink = "https://www.amazon.com"+ moreAnswerLink[0]
+                    except:
+                        print('!!!!!!!!!!!!!!!!!!!!!')
+                        moreAnswerLink = 'None'
+                        print('No Questions')
+                        print('!!!!!!!!!!!!!!!!!!!!!')
+                    #yield Request(moreAnswerLink,callback=self.parseQuestions,dont_filter=True)
+                    
+                    a = {"productDescription":productDescription,"productTitle":productTitle,"ratings":ratings,"AboutItem":AboutItem,"productDetails":productDetails,"brand":brand,"price": price,'similarProducts':similarP,'product_info':prduct_info_values,"url":url,'catmap':catmap,'moreAnswerLink':moreAnswerLink,'SeeAllReviews':SeeAllReviews}
+                    with open("Product.json","a") as fl:
+                        json.dump(a,fl)
+                        fl.write('\n')
+
+                except Exception as e:
+                    print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+                    
+                    print(e)
+                    
+                    print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+
+                    yield Request(url,callback=self.parse,dont_filter=True)
 
 
     def parseReviewpage(self, response):
