@@ -21,9 +21,11 @@ class ReviewsSpider(scrapy.Spider):
     name = 'reviews'
     allowed_domains = ['*']
     DRIVER_PATH = r"E:\ChromeDriver\chromedriver.exe"
+    #driver = webdriver.Chrome(options=options,executable_path=DRIVER_PATH)
     driver = webdriver.Chrome(executable_path=DRIVER_PATH)
-    df = pd.read_csv(r'C:\Users\shubh\Downloads\beauty_FLL.csv')
-    start_urls = list(zip(df.catmap,df.url))
+    df = pd.read_csv(r'C:\Amazon Reviews scraper(part1)\Scraper\reviewsScraper\homeNkitchen_FLL.csv')
+    start_urls = list(zip(df.category,df.url))
+
     
     
     def cleanhtml(self,raw_html):
@@ -36,14 +38,14 @@ class ReviewsSpider(scrapy.Spider):
     def start_requests(self):
         placeHolder = [] # to check duplicates
         all_products_url = [] # will contain dict with catmap and url of products
-        for tup in self.start_urls[:200]:
+        for tup in self.start_urls[:1]:
             all_products_url_singleCat = [] # will be used as place holder for a single category
             url = tup[1]
             catmap = tup[0]
 
             self.driver.get(url)
             try:
-                for pagesToScrape in range(10): 
+                for pagesToScrape in range(5): 
                     element = WebDriverWait(self.driver, 5).until(
                     EC.presence_of_element_located((By.XPATH, '//*[@class="a-section a-spacing-none a-spacing-top-small"]/h2'))
                     )
@@ -93,7 +95,7 @@ class ReviewsSpider(scrapy.Spider):
                     EC.presence_of_element_located((By.XPATH, '//*[@class="a-size-large product-title-word-break"]'))
                     )
                     #scrolling to element
-                    time.sleep(3)
+                    time.sleep(2)
                     element = self.driver.find_element_by_xpath('//*[contains(text(),"Customer reviews")]')
                     self.driver.execute_script("arguments[0].scrollIntoView();", element)
                     
