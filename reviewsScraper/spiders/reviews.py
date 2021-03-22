@@ -20,10 +20,11 @@ import pandas as pd
 class ReviewsSpider(scrapy.Spider):
     name = 'reviews'
     allowed_domains = ['*']
-    DRIVER_PATH = r"E:\ChromeDriver\chromedriver.exe"
+    #DRIVER_PATH = r"E:\ChromeDriver\chromedriver.exe"
     #driver = webdriver.Chrome(options=options,executable_path=DRIVER_PATH)
+    DRIVER_PATH ="/home/shmyadav90s/Downloads/chromedriver"
     driver = webdriver.Chrome(executable_path=DRIVER_PATH)
-    df = pd.read_csv(r'C:\Amazon Reviews scraper(part1)\Scraper\reviewsScraper\homeNkitchen_FLL.csv')
+    df = pd.read_csv('/home/shmyadav90s/Downloads/homeNkitchen_FLL.csv')
     start_urls = list(zip(df.category,df.url))
 
     
@@ -38,7 +39,7 @@ class ReviewsSpider(scrapy.Spider):
     def start_requests(self):
         placeHolder = [] # to check duplicates
         all_products_url = [] # will contain dict with catmap and url of products
-        for tup in self.start_urls[:1]:
+        for tup in self.start_urls[:1000]:
             all_products_url_singleCat = [] # will be used as place holder for a single category
             url = tup[1]
             catmap = tup[0]
